@@ -3,13 +3,19 @@
 Plugin Name: NGG Custom Fields (Xadja)
 Plugin URI:  https://xadja.com
 Description: Self-contained, maintained replacement for the abandoned "NextGEN Custom Fields" plugin. Manages custom field definitions, edits image AND gallery field values, and exposes values on the front end as $image->ngg_custom_fields — using the same nggcf_* tables, so existing data and shortcodes keep working. Detects the legacy plugin and only takes over the front-end read path once it is deactivated, so the two can coexist while you migrate. Once verified, deactivate + delete the old "NextGEN Custom Fields" plugin.
-Version:     1.1.0
+Version:     1.2.0
 Author:      Xadja.com
 Author URI:  https://xadja.com
 License:     GPLv2 or later
 */
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
+
+define( 'XADJA_NGGCF_FILE', __FILE__ );
+define( 'XADJA_NGGCF_DIR', plugin_dir_path( __FILE__ ) );
+
+// One-click updates from the private GitHub repo (token saved under Setup Fields → Updates).
+require_once XADJA_NGGCF_DIR . 'includes/class-xadja-nggcf-updater.php';
 
 /* -------------------------------------------------------------------------
  * Constants  (values match the legacy plugin's schema, do not change)
@@ -510,6 +516,12 @@ function xadja_nggcf_page_setup() {
 		} elseif ( 'delete' === $action ) {
 			xadja_nggcf_delete_field( (int) $_POST['field_id'] );
 			$notice = 'Field deleted.';
+		} elseif ( 'github_token' === $action ) {
+			Xadja_NGGCF_Updater::save_token( isset( $_POST['github_token'] ) ? wp_unslash( $_POST['github_token'] ) : '' );
+			$notice = 'GitHub token saved.';
+		} elseif ( 'check_updates' === $action ) {
+			$v      = Xadja_NGGCF_Updater::check_now();
+			$notice = $v ? sprintf( 'Version %s is available. Update it from the Plugins page.', $v ) : 'No update available; this is the latest version.';
 		}
 	}
 
@@ -619,6 +631,23 @@ function xadja_nggcf_page_setup() {
 			</table>
 			<button class="button button-primary">Create Field</button>
 		</form>
+
+		<h2 style="margin-top:2em;">Updates</h2>
+		<div class="postbox" style="padding:1em;max-width:640px;">
+			<p>Version <?php echo esc_html( get_file_data( XADJA_NGGCF_FILE, array( 'v' => 'Version' ) )['v'] ); ?>. Updates come from the private GitHub repo <code>sawdustandcoffee/xadja-ngg-custom-fields</code>, so WordPress needs a GitHub token with read access to it (fine-grained token, Contents: read).</p>
+			<form method="post" action="<?php echo esc_url( $base ); ?>">
+				<?php wp_nonce_field( 'xadja_nggcf_setup', 'xadja_nggcf_nonce' ); ?>
+				<input type="hidden" name="xadja_action" value="github_token" />
+				<label>GitHub token <input type="password" name="github_token" value="<?php echo esc_attr( Xadja_NGGCF_Updater::token() ); ?>" size="50" autocomplete="off" /></label>
+				<button class="button">Save token</button>
+				<span style="color:#666;margin-left:.5em;"><?php echo Xadja_NGGCF_Updater::token() ? 'Token set.' : 'No token set; updates will not be found.'; ?></span>
+			</form>
+			<form method="post" action="<?php echo esc_url( $base ); ?>" style="margin-top:.5em;">
+				<?php wp_nonce_field( 'xadja_nggcf_setup', 'xadja_nggcf_nonce' ); ?>
+				<input type="hidden" name="xadja_action" value="check_updates" />
+				<button class="button">Check for updates now</button>
+			</form>
+		</div>
 	</div>
 	<?php
 }

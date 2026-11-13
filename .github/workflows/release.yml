@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version (auto-bump patch if the tag already exists)
+        id: v
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          CUR=$(grep -m1 "^Version:" xadja-ngg-custom-fields.php | sed 's/.*Version: *\([0-9.]*\).*/\1/')
+          [ -n "$CUR" ] || { echo "::error::No Version header"; exit 1; }
+          if git ls-remote --tags origin | grep -q "refs/tags/v${CUR}$"; then
+            NEW="${CUR%.*}.$(( ${CUR##*.} + 1 ))"
+            sed -i "s/^Version: *${CUR}/Version:     ${NEW}/" xadja-ngg-custom-fields.php
+            git add xadja-ngg-custom-fields.php
+            git commit -m "Bump version to ${NEW} [skip ci]"
+            git push
+            CUR="$NEW"
+          fi
+          echo "VERSION=$CUR" >> "$GITHUB_OUTPUT"
+          echo "Release version: $CUR"
+
+      - name: Build plugin zip
+        run: |
+          set -e
+          php -l xadja-ngg-custom-fields.php
+          mkdir -p dist/xadja-ngg-custom-fields
+          cp xadja-ngg-custom-fields.php README.md dist/xadja-ngg-custom-fields/
+          cp -r includes dist/xadja-ngg-custom-fields/
+          cd dist && zip -qr "xadja-ngg-custom-fields-${{ steps.v.outputs.VERSION }}.zip" xadja-ngg-custom-fields
+          cp "xadja-ngg-custom-fields-${{ steps.v.outputs.VERSION }}.zip" xadja-ngg-custom-fields.zip
+          ls -la
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.v.outputs.VERSION }}
+          name: NGG Custom Fields (Xadja) v${{ steps.v.outputs.VERSION }}
+          generate_release_notes: true
+          files: |
+            dist/xadja-ngg-custom-fields-${{ steps.v.outputs.VERSION }}.zip
+            dist/xadja-ngg-custom-fields.zip
