@@ -3,7 +3,7 @@
 Plugin Name: NGG Custom Fields (Xadja)
 Plugin URI:  https://xadja.com
 Description: Self-contained, maintained replacement for the abandoned "NextGEN Custom Fields" plugin. Manages custom field definitions, edits image AND gallery field values, and exposes values on the front end as $image->ngg_custom_fields — using the same nggcf_* tables, so existing data and shortcodes keep working. Detects the legacy plugin and only takes over the front-end read path once it is deactivated, so the two can coexist while you migrate. Once verified, deactivate + delete the old "NextGEN Custom Fields" plugin.
-Version:     1.2.0
+Version:     1.2.1
 Author:      Xadja.com
 Author URI:  https://xadja.com
 License:     GPLv2 or later
