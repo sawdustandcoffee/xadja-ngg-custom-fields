@@ -3,7 +3,7 @@
 Plugin Name: NGG Custom Fields (Xadja)
 Plugin URI:  https://xadja.com
 Description: Self-contained, maintained replacement for the abandoned "NextGEN Custom Fields" plugin. Manages custom field definitions, edits image AND gallery field values, and exposes values on the front end as $image->ngg_custom_fields — using the same nggcf_* tables, so existing data and shortcodes keep working. Detects the legacy plugin and only takes over the front-end read path once it is deactivated, so the two can coexist while you migrate. Once verified, deactivate + delete the old "NextGEN Custom Fields" plugin.
-Version:     1.0.0
+Version:     1.1.0
 Author:      Xadja.com
 Author URI:  https://xadja.com
 License:     GPLv2 or later
@@ -317,18 +317,52 @@ function xadja_nggcf_gallery_values( $gid ) {
 	return $out;
 }
 
-function xadja_nggcf_thumb_url( $gallery_path, $filename ) {
+/**
+ * Resolve an image URL through NextGEN's own storage layer when it is loaded,
+ * so gallery paths stored relative to wp-content (NextGEN 3+/4, e.g. "/gallery/x/")
+ * and offloaded media resolve correctly. Falls back to the legacy
+ * "<home>/<gallery path>/thumbs/thumbs_<file>" layout.
+ *
+ * @param string $size 'thumb' or 'full'
+ */
+function xadja_nggcf_image_url( $pid, $gallery_path, $filename, $size = 'thumb' ) {
+	static $storage = null;
+	if ( null === $storage ) {
+		$storage = false;
+		foreach ( array( '\\Imagely\\NGG\\DataStorage\\Manager', 'C_Gallery_Storage' ) as $cls ) {
+			if ( class_exists( $cls ) && method_exists( $cls, 'get_instance' ) ) {
+				$storage = $cls::get_instance();
+				break;
+			}
+		}
+	}
+	if ( $storage && $pid ) {
+		try {
+			$url = $storage->get_image_url( (int) $pid, $size );
+			if ( $url ) {
+				return $url;
+			}
+		} catch ( \Throwable $e ) {
+			// fall through to the legacy path
+		}
+	}
 	if ( empty( $gallery_path ) || empty( $filename ) ) {
 		return '';
 	}
-	return home_url( '/' . trim( $gallery_path, '/' ) . '/thumbs/thumbs_' . $filename );
+	$rel = trim( $gallery_path, '/' );
+	if ( 0 !== strpos( $rel, 'wp-content/' ) && ! file_exists( ABSPATH . $rel ) && file_exists( WP_CONTENT_DIR . '/' . $rel ) ) {
+		$rel = 'wp-content/' . $rel; // path stored relative to wp-content
+	}
+	$file = ( 'thumb' === $size ) ? 'thumbs/thumbs_' . $filename : $filename;
+	return home_url( '/' . $rel . '/' . $file );
 }
 
-function xadja_nggcf_full_url( $gallery_path, $filename ) {
-	if ( empty( $gallery_path ) || empty( $filename ) ) {
-		return '';
-	}
-	return home_url( '/' . trim( $gallery_path, '/' ) . '/' . $filename );
+function xadja_nggcf_thumb_url( $gallery_path, $filename, $pid = 0 ) {
+	return xadja_nggcf_image_url( $pid, $gallery_path, $filename, 'thumb' );
+}
+
+function xadja_nggcf_full_url( $gallery_path, $filename, $pid = 0 ) {
+	return xadja_nggcf_image_url( $pid, $gallery_path, $filename, 'full' );
 }
 
 /* =========================================================================
@@ -653,8 +687,8 @@ function xadja_nggcf_page_images() {
 				<tbody>
 				<?php foreach ( $images as $img ) :
 					$pid   = (int) $img->pid;
-					$thumb = xadja_nggcf_thumb_url( $path, $img->filename );
-					$full  = xadja_nggcf_full_url( $path, $img->filename ); ?>
+					$thumb = xadja_nggcf_thumb_url( $path, $img->filename, $pid );
+					$full  = xadja_nggcf_full_url( $path, $img->filename, $pid ); ?>
 					<tr>
 						<td><?php if ( $thumb ) : ?><img src="<?php echo esc_url( $thumb ); ?>" data-full="<?php echo esc_url( $full ); ?>" data-caption="<?php echo esc_attr( $img->filename . ( $img->alttext ? ' — ' . $img->alttext : '' ) ); ?>" alt="<?php echo esc_attr( $img->alttext ); ?>" class="xadja-nggcf-thumb" style="max-width:80px;height:auto;cursor:zoom-in;" loading="lazy" onerror="this.style.display='none';" /><?php endif; ?></td>
 						<td><strong><?php echo esc_html( $img->alttext ? $img->alttext : $img->filename ); ?></strong><br /><span style="color:#666;"><?php echo esc_html( $img->filename ); ?> &middot; pid <?php echo $pid; ?></span></td>
